@@ -38,9 +38,9 @@ def evaluate(model, noisy_images, clean_images, device):
 def main():
     device = get_device()
     print(f"Using device: {device}")
-    model_path = "/Users/sebmcmorran/SummerProject2025/Autoencoder/code/ultrasound_autoencoder_all_sigmas.pth"
+    model_path = "/Users/sebmcmorran/SummerProject2025/Autoencoder/ultrasound_autoencoder_all_sigmas.pth"
     data_path = "Data/test"
-    noise_levels = [0.05, 0.1, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90]
+    noise_levels = [0.05, 0.1, 0.20, 0.30, 0.40, 0.50]
     noise_type = ["rayleigh"]
 
     print("Loading test images...")

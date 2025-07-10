@@ -18,7 +18,7 @@ import os
 import matplotlib.pyplot as plt
 import random
 
-noise_levels = [0.05, 0.1, 0.2, 0.3, 0.4, 0.5]
+noise_levels = [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]
 
 
 def train_model(model, train_loader, criterion, optimizer, device, num_epochs=50):
@@ -187,7 +187,7 @@ def run_rayleigh_noise_experiments(device):
         print(f"Test set (Rayleigh noise σ={sigma}): PSNR={avg_psnr:.2f} dB, SSIM={avg_ssim:.4f}")
 
     # Save one checkpoint
-    model_save_path = "ultrasound_autoencoder_all_sigmas.pth"
+    model_save_path = "CNN_allsigmas.pth"
     torch.save(model.state_dict(), model_save_path)
     print(f"Model saved as {model_save_path}")
 
