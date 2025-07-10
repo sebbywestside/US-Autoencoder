@@ -9,9 +9,11 @@ def get_device():
         return torch.device("cuda")
     else:
         return torch.device("cpu")
+    print(f"Using device: {device}")
 
 def main():
     device = get_device()
+    
     run_rayleigh_noise_experiments(device)
 
 if __name__ == "__main__":
