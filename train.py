@@ -11,14 +11,15 @@ from skimage.metrics import peak_signal_noise_ratio, structural_similarity
 from tqdm import tqdm
 from data_utils import load_ultrasound_data
 from noise_utils import add_rayleigh_noise
-from model import CNNAutoencoderLarge
+from model import CNNAutoencoderLarge, UltrasoundAutoencoder
 from dataset import UltrasoundDataset
 import torch.optim as optim
 import os
 import matplotlib.pyplot as plt
 import random
 
-noise_levels = [0.05, 0.1, 0.2, 0.3, 0.4, 0.5]
+# Set the noise levels to [0.1, 0.25, 0.50, 0.75]
+noise_levels = [0.1, 0.25, 0.50, 0.75]
 
 
 def train_model(model, train_loader, criterion, optimizer, device, num_epochs=50):
@@ -131,12 +132,13 @@ def evaluate_model_on_noise_level(model, test_images, device, sigma, num_example
     plt.show()
     return np.mean(psnr_list), np.mean(ssim_list)
 
-def run_rayleigh_noise_experiments(device):
+def run_rayleigh_noise_experiments(device, model_class, model_name):
     data_path = "Data/test"
     train_path = "Data/train"
     num_epochs = 100
     batch_size = 16
 
+    print(f"\n==== Training {model_name} ====")
     print("Loading training images...")
     train_images = load_ultrasound_data(train_path, image_size=(128, 128))
     print(f"Loaded {len(train_images)} training images.")
@@ -144,7 +146,7 @@ def run_rayleigh_noise_experiments(device):
     test_images = load_ultrasound_data(data_path, image_size=(128, 128))
     print(f"Loaded {len(test_images)} test images.")
 
-    # For each original image, create 6 noisy versions (one for each sigma)
+    # For each original image, create noisy versions (one for each sigma)
     train_noisy = []
     train_clean = []
     for img in train_images:
@@ -162,7 +164,7 @@ def run_rayleigh_noise_experiments(device):
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
     # Initialize model, optimizer, loss ONCE
-    model = CNNAutoencoderLarge().to(device)
+    model = model_class().to(device)
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
@@ -173,7 +175,7 @@ def run_rayleigh_noise_experiments(device):
     # Plot loss curve
     plt.figure(figsize=(8, 4))
     plt.plot(loss_history)
-    plt.title('Training Loss Curve')
+    plt.title(f'Training Loss Curve ({model_name})')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
     plt.grid(True)
@@ -187,7 +189,12 @@ def run_rayleigh_noise_experiments(device):
         print(f"Test set (Rayleigh noise σ={sigma}): PSNR={avg_psnr:.2f} dB, SSIM={avg_ssim:.4f}")
 
     # Save one checkpoint
-    model_save_path = "ultrasound_autoencoder_all_sigmas.pth"
+    if model_name == "AE":
+        model_save_path = "AE01075.pth"
+    elif model_name == "CNN":
+        model_save_path = "CNN01075.pth"
+    else:
+        model_save_path = f"ultrasound_autoencoder_{model_name}.pth"
     torch.save(model.state_dict(), model_save_path)
     print(f"Model saved as {model_save_path}")
 
@@ -202,7 +209,9 @@ def get_device():
 def main():
     device = get_device()
     print(f"Using device: {device}")
-    run_rayleigh_noise_experiments(device)
+    # Train both models sequentially
+    run_rayleigh_noise_experiments(device, UltrasoundAutoencoder, "AE")
+    run_rayleigh_noise_experiments(device, CNNAutoencoderLarge, "CNN")
 
 if __name__ == "__main__":
     main() 
