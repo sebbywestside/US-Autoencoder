@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 from train import run_rayleigh_noise_experiments
+from model import CNNAutoencoderLarge, UltrasoundAutoencoder
 
 def get_device():
     if torch.backends.mps.is_available():
@@ -13,8 +14,8 @@ def get_device():
 
 def main():
     device = get_device()
-    
-    run_rayleigh_noise_experiments(device)
+    run_rayleigh_noise_experiments(device, UltrasoundAutoencoder, "AE")
+    run_rayleigh_noise_experiments(device, CNNAutoencoderLarge, "CNN")
 
 if __name__ == "__main__":
     main()

@@ -9,8 +9,11 @@ from PIL import Image
 
 def load_ultrasound_data(data_path, image_size=(128, 128)):
     """Load ultrasound images and prepare for training"""
-    image_files = sorted([f for f in os.listdir(data_path)
-                         if f.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.tiff', '.tif'))])
+    image_files = sorted([
+        f for f in os.listdir(data_path)
+        if f.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.tiff', '.tif'))
+        and 'mask' not in f.lower()
+    ])
     images = []
     for img_name in image_files:
         try:
