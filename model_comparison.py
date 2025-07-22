@@ -15,6 +15,7 @@ from skimage.metrics import peak_signal_noise_ratio, structural_similarity
 import matplotlib.pyplot as plt
 import seaborn as sns
 from datetime import datetime
+from filters import median_filter, mean_filter, gaussian_filter_img, bilateral_filter, frost_filter, kuan_filter, lee_filter
 
 class ModelComparison:
     def __init__(self, device=None):
@@ -26,7 +27,9 @@ class ModelComparison:
         # Model paths (update as needed)
         self.model_paths = {
             'CNN01075': '/Users/sebmcmorran/SummerProject2025/Autoencoder/CNN01075.pth',
-            'AE001075': '/Users/sebmcmorran/SummerProject2025/Autoencoder/AE01075.pth'
+            'AE001075': '/Users/sebmcmorran/SummerProject2025/Autoencoder/AE01075.pth',
+            'DGAN': '/Users/sebmcmorran/SummerProject2025/Autoencoder/DGAN_final.pth',
+            'WGAN_GP': '/Users/sebmcmorran/SummerProject2025/Autoencoder/WGAN_GP_final.pth',
         }
         
         # Initialize models
@@ -49,12 +52,26 @@ class ModelComparison:
             try:
                 if "CNN" in name:
                     model = CNNAutoencoderLarge().to(self.device)
-                else:
+                    model.load_state_dict(torch.load(path, map_location=self.device))
+                elif "AE" in name:
                     model = UltrasoundAutoencoder().to(self.device)
-                model.load_state_dict(torch.load(path, map_location=self.device))
+                    model.load_state_dict(torch.load(path, map_location=self.device))
+                elif name == "DGAN":
+                    from model import DenoisingGAN
+                    model = DenoisingGAN().to(self.device)
+                    ckpt = torch.load(path, map_location=self.device, weights_only=False)
+                    model.generator.load_state_dict(ckpt['generator_state_dict'])
+                    model.discriminator.load_state_dict(ckpt['discriminator_state_dict'])
+                elif name == "WGAN_GP":
+                    from model import WGAN_GP
+                    model = WGAN_GP().to(self.device)
+                    ckpt = torch.load(path, map_location=self.device, weights_only=False)
+                    model.generator.load_state_dict(ckpt['generator_state_dict'])
+                    model.discriminator.load_state_dict(ckpt['discriminator_state_dict'])
                 model.eval()
                 self.models[name] = model
                 print(f"✓ {name} model loaded successfully")
+                print(f"{name} model type: {type(model)}")
             except Exception as e:
                 print(f"✗ Failed to load {name} model: {e}")
     
@@ -68,8 +85,10 @@ class ModelComparison:
             sigma_results = []
             
             for idx, clean in enumerate(test_images):
-                # Add noise
-                if noise_type == 'rayleigh':
+                # Add noise, or use clean image if sigma == 0.0
+                if sigma == 0.0:
+                    noisy = clean.copy()
+                elif noise_type == 'rayleigh':
                     noisy = add_rayleigh_noise(clean, scale=sigma)
                 elif noise_type == 'gaussian':
                     noisy = add_Gaussian_noise(clean, scale=sigma)
@@ -109,7 +128,7 @@ class ModelComparison:
         test_images = load_ultrasound_data(self.data_path, image_size=self.image_size)
         
         # Limit number of images for faster testing
-        if len(test_images) > max_images:
+        if max_images is not None and len(test_images) > max_images:
             test_images = test_images[:max_images]
             print(f"Using first {max_images} images for testing")
         
@@ -210,26 +229,47 @@ class ModelComparison:
         fig, axes = plt.subplots(2, 2, figsize=(15, 12))
         fig.suptitle('Model Comparison: PSNR and SSIM vs Noise Level', fontsize=16)
         
-        # PSNR plot
         ax1 = axes[0, 0]
-        for model_name in stats.keys():
+        ax2 = axes[0, 1]
+        print("Models being plotted:", list(stats.keys()))
+        # Assign unique styles for each model
+        model_styles = {
+            'CNN01075': {'color': 'tab:red',    'marker': 'o', 'linestyle': '-'},
+            'AE001075': {'color': 'tab:blue',   'marker': 's', 'linestyle': '--'},
+            'DGAN':     {'color': 'tab:green',  'marker': '^', 'linestyle': '-.'},
+            'WGAN_GP':  {'color': 'tab:orange', 'marker': 'D', 'linestyle': ':'}
+        }
+
+        for idx, model_name in enumerate(stats.keys()):
             psnr_means = [stats[model_name][sigma]['psnr_mean'] for sigma in self.noise_levels]
             psnr_stds = [stats[model_name][sigma]['psnr_std'] for sigma in self.noise_levels]
-            ax1.errorbar(self.noise_levels, psnr_means, yerr=psnr_stds, 
-                        marker='o', label=model_name, linewidth=2, capsize=5)
+            ssim_means = [stats[model_name][sigma]['ssim_mean'] for sigma in self.noise_levels]
+            ssim_stds = [stats[model_name][sigma]['ssim_std'] for sigma in self.noise_levels]
+
+            # Add a small horizontal jitter for each model
+            xvals = self.noise_levels
+
+            style = model_styles.get(model_name, {})
+            ax1.errorbar(xvals, psnr_means, yerr=psnr_stds, 
+                         marker=style.get('marker', 'o'), 
+                         label=model_name, 
+                         linewidth=2, 
+                         capsize=5, 
+                         color=style.get('color', None), 
+                         linestyle=style.get('linestyle', '-'))
+            ax2.errorbar(xvals, ssim_means, yerr=ssim_stds, 
+                         marker=style.get('marker', 'o'), 
+                         label=model_name, 
+                         linewidth=2, 
+                         capsize=5, 
+                         color=style.get('color', None), 
+                         linestyle=style.get('linestyle', '-'))
         ax1.set_xlabel('Noise Level (σ)')
         ax1.set_ylabel('PSNR (dB)')
         ax1.set_title('Peak Signal-to-Noise Ratio')
         ax1.legend()
         ax1.grid(True, alpha=0.3)
         
-        # SSIM plot
-        ax2 = axes[0, 1]
-        for model_name in stats.keys():
-            ssim_means = [stats[model_name][sigma]['ssim_mean'] for sigma in self.noise_levels]
-            ssim_stds = [stats[model_name][sigma]['ssim_std'] for sigma in self.noise_levels]
-            ax2.errorbar(self.noise_levels, ssim_means, yerr=ssim_stds, 
-                        marker='s', label=model_name, linewidth=2, capsize=5)
         ax2.set_xlabel('Noise Level (σ)')
         ax2.set_ylabel('SSIM')
         ax2.set_title('Structural Similarity Index')
@@ -393,6 +433,51 @@ class ModelComparison:
             best_psnr = stats[best_model_sigma][sigma]['psnr_mean']
             print(f"σ={sigma:4.2f}: {best_model_sigma:25s} (PSNR={best_psnr:.2f} dB)")
 
+    def visualize_denoising_examples(self, results, output_dir="results", image_idx=0):
+        """For each noise level, display the clean image, noisy image, and denoised images from each model (one figure per noise level)."""
+        import matplotlib.pyplot as plt
+        import os
+        os.makedirs(output_dir, exist_ok=True)
+        
+        model_names = list(results.keys())
+        noise_levels = self.noise_levels
+        
+        for sigma in noise_levels:
+            # Get clean and noisy images from the first model's results
+            first_model_result = results[model_names[0]][sigma][image_idx]
+            clean = first_model_result['clean']
+            noisy = first_model_result['noisy']
+            
+            n_cols = 2 + len(model_names)
+            fig, axes = plt.subplots(1, n_cols, figsize=(4 * n_cols, 4))
+            fig.suptitle(f"Denoising Results at Noise Level σ={sigma}", fontsize=16)
+            
+            # Show clean image
+            axes[0].imshow(clean, cmap='gray', vmin=0, vmax=1)
+            axes[0].set_title('Clean Image')
+            axes[0].axis('off')
+            
+            # Show noisy image
+            axes[1].imshow(noisy, cmap='gray', vmin=0, vmax=1)
+            axes[1].set_title(f'Noisy Image (σ={sigma})')
+            axes[1].axis('off')
+            
+            # Show denoised images from each model
+            for i, model_name in enumerate(model_names):
+                denoised = results[model_name][sigma][image_idx]['denoised']
+                psnr = results[model_name][sigma][image_idx]['psnr']
+                ssim = results[model_name][sigma][image_idx]['ssim']
+                axes[i+2].imshow(denoised, cmap='gray', vmin=0, vmax=1)
+                axes[i+2].set_title(f'{model_name}\nPSNR={psnr:.2f}, SSIM={ssim:.4f}')
+                axes[i+2].axis('off')
+            
+            plt.tight_layout(rect=[0, 0, 1, 0.95])
+            fig_filename = os.path.join(output_dir, f'denoising_models_sigma_{sigma}.png')
+            plt.savefig(fig_filename, dpi=200)
+            plt.show()  # Display interactively
+            plt.close(fig)
+            print(f"Saved and displayed denoising models example for σ={sigma} to {fig_filename}")
+
 def main():
     """Main function to run the model comparison"""
     print("Starting Model Comparison...")
@@ -401,7 +486,7 @@ def main():
     comparison = ModelComparison()
     
     # Run comparison
-    results = comparison.run_comparison(max_images=50)  # Limit for faster testing
+    results = comparison.run_comparison(max_images=100)  # Use all test images
     
     # Calculate statistics
     stats = comparison.calculate_statistics(results)
@@ -414,6 +499,9 @@ def main():
     
     # Create visualizations
     plot_file = comparison.create_visualizations(stats)
+    
+    # Visualize denoising examples for each noise level
+    comparison.visualize_denoising_examples(results)
     
     print(f"\nComparison completed successfully!")
     print(f"Results saved to: {stats_file}")
